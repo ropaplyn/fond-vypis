@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Výpis fondu</title>
+<style>
+/* Layout: single-column mobile statement — hero value card, then a quiet
+   breakdown list, then a dimmer fund-activity panel below a divider. */
+:root{
+  --bg:#F2F3F0; --panel:#FFFFFF; --ink:#1A2420; --muted:#5B6660;
+  --line:#E1E4DD; --accent:#1F7A5C; --accent-soft:#E4F2EC; --warn:#B4472C;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101512; --panel:#182019; --ink:#EBEFE9; --muted:#8C9690;
+    --line:#2A332C; --accent:#3FCB93; --accent-soft:#17251D; --warn:#E08A6E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101512; --panel:#182019; --ink:#EBEFE9; --muted:#8C9690;
+  --line:#2A332C; --accent:#3FCB93; --accent-soft:#17251D; --warn:#E08A6E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Work Sans",system-ui,sans-serif;
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+}
+.wrap{max-width:480px; margin:0 auto; padding-block:28px 48px}
+.brand{display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:22px}
+.brand h1{font-family:"Fraunces",Georgia,serif; font-size:19px; font-weight:600; margin:0; letter-spacing:.2px}
+.brand .name{font-size:13px; color:var(--muted)}
+.hero{
+  background:var(--panel); border:1px solid var(--line); border-radius:18px;
+  padding:26px 22px; text-align:center; margin-bottom:18px;
+}
+.hero .lbl{font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:10px}
+.hero .big{
+  font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums;
+  font-size:40px; font-weight:600; line-height:1.1; letter-spacing:-.5px;
+}
+.hero .sub{font-size:13px; color:var(--muted); margin-top:8px}
+.rows{background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-bottom:18px}
+.row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row .k{font-size:13px; color:var(--muted)}
+.row .v{font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums; font-size:14px; font-weight:600; text-align:right; min-width:0}
+.row .v.accent{color:var(--accent)}
+.divider{display:flex; align-items:center; gap:10px; margin:26px 0 14px; color:var(--muted)}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.divider span{font-size:11px; letter-spacing:1.2px; text-transform:uppercase; white-space:nowrap}
+.stats{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.stat{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; min-width:0}
+.stat .k{font-size:11px; color:var(--muted); margin-bottom:6px}
+.stat .v{font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums; font-size:18px; font-weight:600}
+.foot{margin-top:22px; font-size:11.5px; color:var(--muted); line-height:1.6}
+.foot .asof{margin-top:4px}
+.state{min-height:70vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:12px; padding:24px}
+.state p{color:var(--muted); font-size:13.5px; max-width:320px; line-height:1.6}
+.spin{width:28px;height:28px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.retry{border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:10px; padding:10px 18px; font-size:13px; font-family:inherit; cursor:pointer}
+[hidden]{display:none!important}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+</head>
+<body>
+
+<div id="loading" class="state">
+  <div class="spin"></div>
+  <p>Načítám výpis…</p>
+</div>
+
+<div id="errstate" class="state" hidden>
+  <p id="errtext">Výpis se nepodařilo načíst. Zkontroluj prosím, že používáš odkaz přesně tak, jak jsi ho dostal.</p>
+  <button class="retry" onclick="load()">Zkusit znovu</button>
+</div>
+
+<div id="content" class="wrap" hidden>
+  <div class="brand">
+    <h1 id="fundName">Fond</h1>
+    <span class="name" id="invName"></span>
+  </div>
+
+  <div class="hero">
+    <div class="lbl">Celková hodnota</div>
+    <div class="big" id="totalValue">$0</div>
+    <div class="sub" id="totalValueSub"></div>
+  </div>
+
+  <div class="rows">
+    <div class="row"><span class="k">Vklad</span><span class="v" id="deposit"></span></div>
+    <div class="row"><span class="k">Datum vkladu</span><span class="v" id="depDate"></span></div>
+    <div class="row"><span class="k">Dní v programu</span><span class="v" id="daysHeld"></span></div>
+    <div class="row"><span class="k">Roční sazba</span><span class="v" id="rate"></span></div>
+    <div class="row"><span class="k">Dosavadní výnos</span><span class="v accent" id="accrued"></span></div>
+  </div>
+
+  <div class="divider"><span>Aktivita fondu</span></div>
+  <div class="stats">
+    <div class="stat"><div class="k">Uzavřené obchody</div><div class="v" id="tradeCount">—</div></div>
+    <div class="stat"><div class="k">Úspěšnost</div><div class="v" id="winRate">—</div></div>
+    <div class="stat"><div class="k">Otevřené pozice</div><div class="v" id="openCount">—</div></div>
+    <div class="stat"><div class="k">Hodnota v pozicích</div><div class="v" id="openValue">—</div></div>
+  </div>
+
+  <div class="foot">
+    Výnos je pevná sazba z vloženého vkladu, počítaná na dny. Aktivita fondu je informativní souhrn bez konkrétních obchodovaných titulů.
+    <div class="asof" id="asOf"></div>
+  </div>
+</div>
+
+<script>
+function fmtUsd(n){
+  var v = Math.round((n||0)*100)/100;
+  return (v<0?'-':'')+'$'+Math.abs(v).toLocaleString('cs-CZ',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtDate(iso){
+  try{
+    var d=new Date(iso+'T00:00:00');
+    return d.toLocaleDateString('cs-CZ',{day:'numeric',month:'long',year:'numeric'});
+  }catch(e){return iso;}
+}
+function show(id){
+  ['loading','errstate','content'].forEach(function(x){
+    document.getElementById(x).hidden = (x!==id);
+  });
+}
+
+async function load(){
+  show('loading');
+  var gistId = (location.hash || '').replace(/^#/, '').trim();
+  if (!gistId){
+    document.getElementById('errtext').textContent = 'V odkazu chybí přístupový kód. Použij prosím přesně ten odkaz, který jsi dostal.';
+    show('errstate');
+    return;
+  }
+  try{
+    var res = await fetch('https://api.github.com/gists/' + encodeURIComponent(gistId), {
+      headers: {'Accept':'application/vnd.github+json'}
+    });
+    if (!res.ok) throw new Error('http_' + res.status);
+    var gist = await res.json();
+    var file = gist.files && gist.files['summary.json'];
+    if (!file) throw new Error('no_file');
+    var data = JSON.parse(file.content);
+    render(data);
+    show('content');
+  }catch(e){
+    document.getElementById('errtext').textContent = 'Výpis se teď nepodařilo načíst. Zkus to prosím za chvíli znovu.';
+    show('errstate');
+  }
+}
+
+function render(data){
+  var f = data.fund || {};
+  var inv = data.investor || {};
+  document.getElementById('fundName').textContent = data.fund_name || 'Fond';
+  document.getElementById('invName').textContent = inv.name || '';
+
+  document.getElementById('totalValue').textContent = fmtUsd(inv.total_value_usd);
+  document.getElementById('totalValueSub').textContent = 'vklad ' + fmtUsd(inv.deposit_usd) + ' + výnos ' + fmtUsd(inv.accrued_usd);
+
+  document.getElementById('deposit').textContent = '€' + Math.round(inv.deposit_eur||0).toLocaleString('cs-CZ') + ' / ' + fmtUsd(inv.deposit_usd);
+  document.getElementById('depDate').textContent = inv.deposit_date ? fmtDate(inv.deposit_date) : '—';
+  document.getElementById('daysHeld').textContent = (inv.days_held!=null ? inv.days_held : '—') + ' dní';
+  document.getElementById('rate').textContent = (inv.annual_rate_pct!=null ? inv.annual_rate_pct : '—') + ' % p.a.';
+  document.getElementById('accrued').textContent = '+' + fmtUsd(inv.accrued_usd);
+
+  document.getElementById('tradeCount').textContent = (f.trade_count!=null ? f.trade_count : '—');
+  var total = (f.wins||0)+(f.losses||0);
+  document.getElementById('winRate').textContent = total>0 ? Math.round(100*f.wins/total)+' %' : '—';
+  document.getElementById('openCount').textContent = (f.open_positions!=null ? f.open_positions : '—');
+  document.getElementById('openValue').textContent = f.open_value_usd!=null ? fmtUsd(f.open_value_usd) : '—';
+
+  var asof = '';
+  try{ asof = 'Aktualizováno ' + new Date(data.as_of).toLocaleString('cs-CZ'); }catch(e){}
+  document.getElementById('asOf').textContent = asof;
+}
+
+load();
+window.addEventListener('hashchange', load);
+setInterval(function(){ if(!document.hidden) load(); }, 3*60*1000);
+</script>
+</body>
+</html>
